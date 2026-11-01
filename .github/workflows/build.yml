@@ -1,0 +1,55 @@
+name: Build NWA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installer la chaine ARM
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: Recuperer le modele officiel NumWorks
+        run: |
+          git clone --depth 1 https://github.com/numworks/epsilon-sample-app-c template
+          sed -i 's|nwlink@0.0.16|nwlink@0.0.19|' template/Makefile
+          sed -i 's|eadk-cflags|eadk-cflags-device|' template/Makefile
+
+      - name: Compiler l appli
+        run: |
+          cp src/main.c template/src/main.c
+          cd template && make build
+
+      - name: Garder le fichier compile
+        run: cp template/output/app.nwa "$RUNNER_TEMP/app.nwa"
+
+      - name: Publier le .nwa
+        run: |
+          git config user.name "numworks-builder"
+          git config user.email "builder@users.noreply.github.com"
+          git checkout --orphan nwa-build
+          git rm -rf . > /dev/null 2>&1 || true
+          cp "$RUNNER_TEMP/app.nwa" app.nwa
+          git add app.nwa
+          git commit -m "Compilation du fichier .nwa"
+          git push --force origin nwa-build
+
+      - name: Archiver le .nwa
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-nwa
+          path: app.nwa
